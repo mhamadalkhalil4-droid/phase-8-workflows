@@ -14,7 +14,7 @@ h1{color:#172B4D;font-size:22px;margin-bottom:4px;}
 .wf-sub{font-size:12px;color:#64748B;margin-bottom:16px;line-height:1.6;}
 .mermaid{margin-top:8px;}
 .note{background:#E6F7F7;border:1px solid #00BFBF;border-radius:8px;padding:10px 16px;font-size:11.5px;color:#0F1F38;margin:0 0 16px 0;line-height:1.6;}
-.warn{background:#FFFBEB;border:1px solid #D97706;border-radius:8px;padding:10px 16px;font-size:11.5px;color:#78350F;margin:0 0 16px 0;line-height:1.6;}
+.warn{background:#FEF9C3;border:1px solid #D97706;border-radius:8px;padding:10px 16px;font-size:11.5px;color:#78350F;margin:0 0 16px 0;line-height:1.6;}
 .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:24px;padding-top:18px;border-top:1px solid #E2E8F0;}
 .legend-item{display:flex;align-items:center;gap:7px;font-size:11px;color:#2D3F5C;}
 .legend-box{width:20px;height:16px;border-radius:4px;flex-shrink:0;}
@@ -40,25 +40,20 @@ mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'
 <div class="wf">
   <div class="wf-title"><span class="wf-num">1</span>Cancellation Initiation &amp; Immediate Collection Impact</div>
   <div class="wf-sub">Trigger: Ops or merchant clicks Cancel in the mandate actions dropdown on SCR-MND-001 &nbsp;·&nbsp; Actors: Ops Team / Merchant · System · RPA</div>
-  <div class="note">ℹ️ Cancellation can only be initiated from SCR-MND-001 (Mandate Management screen). Only the ops team and the merchant can trigger it. Once confirmed, cancellation is irreversible — there is no undo.<br/><br/>
-  ℹ️ The system takes immediate action on all collections and related mandates the moment cancellation is confirmed. Every collection status is handled — including all Phase 7 recovery statuses.<br/><br/>
-  ℹ️ If Phase 7 recovery had already created a replacement mandate for this mandate (Group 1 — NEW DD CASES: codes A, F, G, V, W), the replacement mandate is also cancelled automatically alongside the original (Option A).</div>
+  <div class="note">ℹ️ Cancellation can only be initiated from SCR-MND-001 (Mandate Management screen) by the ops team or the merchant. Once confirmed, cancellation is irreversible — there is no undo.<br/><br/>
+  ℹ️ The moment cancellation is confirmed, the system immediately resolves every collection linked to this mandate. Each collection's current status determines what happens to it — see the summary table below.<br/><br/>
+</div>
   <div class="warn">⚠️ Cancellation is permanent and irreversible. Once confirmed, the process cannot be stopped or reversed from any screen.</div>
   <div class="mermaid">
 flowchart TD
-  A([START — Ops or merchant clicks Cancel in mandate actions dropdown]) --> B
+  A([START — Ops or merchant clicks Cancel in mandate actions dropdown on SCR-MND-001]) --> B
   B["Confirmation dialog shown:<br/>Are you sure you want to cancel this mandate?<br/>This action is permanent and cannot be undone.<br/>Red confirm button."]:::ops --> C
   C{Confirmed?}:::dec
   C -->|NO| D([END — No action taken · Mandate stays active])
   C -->|YES| E
-  E["Mandate status → Cancellation Pending<br/>Mandate moves to SCR-CAN-001"]:::sys --> F
-  F["System checks: did Phase 7 create a replacement mandate for this mandate?<br/>(Group 1 — NEW DD CASES recovery)"]:::sys --> G
-  G{Replacement mandate exists?}:::dec
-  G -->|YES| G1["Replacement mandate also cancelled immediately<br/>Same Cancellation Pending status · Same Phase 8 process<br/>Replacement mandate's collections also handled below"]:::sys
-  G -->|NO| H
-  G1 --> H
+  E["Mandate status → Cancellation Pending<br/>Mandate moves to SCR-CAN-001"]:::sys --> H
 
-  H["System scans all collections linked to this mandate<br/>(and replacement mandate if applicable)"]:::sys --> I
+  H["System scans all collections linked to this mandate"]:::sys --> I
   I{More collections to process?}:::dec
   I -->|NO| Z["RPA triggered to submit cancellation file to bank"]:::rpa
   I -->|YES| J
@@ -67,12 +62,10 @@ flowchart TD
 
   J -->|"Future Collection"| J1["Deleted immediately<br/>Disappears from Future Collections screen"]:::del
   J -->|"Ready for Collection"| J2["Status → Stopped (permanent — cannot be reactivated)<br/>Moves to Collection Log"]:::stop
-  J -->|"Processing Payment"| J3["Flagged: cancel after bank processes<br/>See WF 1b — treated identically to Pending Bank Response"]:::wait
-  J -->|"Pending Bank Response<br/>(Phase 5 and Phase 7 context)"| J4["Flagged: cancel after bank processes<br/>See WF 1b"]:::wait
+  J -->|"Processing Payment"| J3["System waits for collection result before cancelling mandate<br/>See WF 1b"]:::wait
+  J -->|"Pending Bank Response<br/>(Phase 5 and Phase 7 context)"| J4["System waits for collection result before cancelling mandate<br/>See WF 1b"]:::wait
 
-  J -->|"Any active Phase 7 recovery status:<br/>Pending Payer Response<br/>Pending Bank Resubmission<br/>Escalated<br/>Not Responding Clients<br/>Failed Max Bank Submissions"| J5["Status → Failed immediately<br/>Moves to Collection Log<br/>No further recovery attempted"]:::fail
-
-  J -->|"Pending Payer to Sign New Mandate<br/>Pending Bank to Approve New Mandate<br/>(Group 1 replacement mandate in progress)"| J6["Status → Failed immediately<br/>Replacement mandate cancelled separately (see above)<br/>No further recovery attempted"]:::fail
+  J -->|"Any active Phase 7 recovery status:<br/>Pending Payer Response<br/>Pending Bank Resubmission<br/>Escalated<br/>Not Responding Clients<br/>Failed Max Bank Submissions"| J5["Status → Stopped immediately<br/>Moves to Collection Log<br/>No further recovery attempted"]:::stop
 
   J -->|"Received / Failed / Stopped / Waived"| J7["Already in terminal state<br/>No action needed"]:::info
 
@@ -81,7 +74,6 @@ flowchart TD
   J3 --> I
   J4 --> I
   J5 --> I
-  J6 --> I
   J7 --> I
   Z --> ZZ([END — Cancellation initiated · Continues in WF 2])
 
@@ -91,27 +83,27 @@ flowchart TD
   classDef dec  fill:#D97706,color:#fff,stroke:none
   classDef del  fill:#DC2626,color:#fff,stroke:none
   classDef stop fill:#475569,color:#fff,stroke:none
-  classDef fail fill:#9F1239,color:#fff,stroke:none
   classDef wait fill:#FEF9C3,color:#854D0E,stroke:#D97706,stroke-width:2px
   classDef info fill:#F8FAFC,color:#475569,stroke:#CBD5E1,stroke-width:1.5px
   </div>
 
   <br/>
-  <div class="wf-title" style="font-size:15px; margin-bottom:8px;">WF 1b — Processing Payment &amp; Pending Bank Response: What Happens After Bank Responds</div>
-  <div class="note">ℹ️ When cancellation is initiated and a collection is in Processing Payment or Pending Bank Response status, the system cannot cancel the collection immediately — the collection is already with the RPA or the bank. Phase 6 processes the settlement file as normal, then once the bank responds the system applies cancellation logic.<br/><br/>
-  Processing Payment and Pending Bank Response are treated identically in this sub-workflow — both mean the collection is already in flight.</div>
+  <div class="wf-title" style="font-size:15px; margin-bottom:8px;">WF 1b — Waiting for a Collection Result Before Proceeding with Cancellation</div>
+  <div class="note">ℹ️ When cancellation is initiated and a collection is in <strong>Processing Payment</strong> or <strong>Pending Bank Response</strong> status, the system waits for the collection result to come back from the bank before it proceeds with the mandate cancellation. Once the result arrives — whether Received or Bounced — the mandate cancellation continues.</div>
   <div class="mermaid">
 flowchart TD
   A([Collection is Processing Payment or Pending Bank Response<br/>when mandate cancellation is initiated]) --> B
-  B["Collection flagged internally:<br/>Cancel this collection after bank responds<br/>Phase 5 / Phase 6 / RPA continues to process as normal"]:::sys --> C
+  B["System waits for the collection result from the bank<br/>Mandate cancellation is on hold until this collection resolves"]:::sys --> C
   C{Phase 6 downloads settlement file —<br/>bank response for this collection?}:::dec
   C -->|"Received — bank collected the payment"| D["Collection status → Received<br/>Moves to Collection Log<br/>Mandate cancellation continues — WF 2 proceeds"]:::ok
-  C -->|"Bounced — bank returned the payment"| E["Collection status → Failed immediately<br/>(not Bounced — mandate is being cancelled so no recovery)<br/>Moves to Collection Log<br/>Mandate cancellation continues — WF 2 proceeds"]:::fail
+  C -->|"Bounced — bank returned the payment"| E["Collection briefly shows Bounced status"]:::bounce
+  E --> F["System immediately sets status → Stopped<br/>(mandate is being cancelled — no Phase 7 recovery attempted)<br/>Moves to Collection Log<br/>Mandate cancellation continues — WF 2 proceeds"]:::stop
 
-  classDef sys  fill:#1E40AF,color:#fff,stroke:none
-  classDef dec  fill:#D97706,color:#fff,stroke:none
-  classDef ok   fill:#15803D,color:#fff,stroke:none
-  classDef fail fill:#9F1239,color:#fff,stroke:none
+  classDef sys    fill:#1E40AF,color:#fff,stroke:none
+  classDef dec    fill:#D97706,color:#fff,stroke:none
+  classDef ok     fill:#15803D,color:#fff,stroke:none
+  classDef bounce fill:#FFE4E6,color:#9F1239,stroke:#FDA4AF,stroke-width:2px
+  classDef stop   fill:#475569,color:#fff,stroke:none
   </div>
 
   <br/>
@@ -120,15 +112,13 @@ flowchart TD
     <tr><th>Collection status at cancellation time</th><th>Immediate action</th><th>Context</th></tr>
     <tr><td>Future Collection</td><td>Deleted immediately</td><td>Phase 5 / Phase 7 — both types</td></tr>
     <tr><td>Ready for Collection</td><td>→ Stopped (permanent)</td><td>Phase 5</td></tr>
-    <tr><td>Processing Payment</td><td>Flagged — wait for bank response (WF 1b)</td><td>Phase 5 — was "Sent for Collection"</td></tr>
-    <tr><td>Pending Bank Response</td><td>Flagged — wait for bank response (WF 1b)</td><td>Phase 5 and Phase 7</td></tr>
-    <tr><td>Pending Payer Response</td><td>→ Failed immediately</td><td>Phase 7 — all categories</td></tr>
-    <tr><td>Pending Payer to Sign New Mandate</td><td>→ Failed immediately · Replacement mandate also cancelled</td><td>Phase 7 — Group 1 NEW DD CASES only</td></tr>
-    <tr><td>Pending Bank to Approve New Mandate</td><td>→ Failed immediately · Replacement mandate also cancelled</td><td>Phase 7 — Group 1 NEW DD CASES only</td></tr>
-    <tr><td>Pending Bank Resubmission</td><td>→ Failed immediately</td><td>Phase 7</td></tr>
-    <tr><td>Escalated</td><td>→ Failed immediately</td><td>Phase 7 — all escalated cases including Code R</td></tr>
-    <tr><td>Not Responding Clients</td><td>→ Failed immediately</td><td>Phase 7 — Group 1 max payer reminders reached</td></tr>
-    <tr><td>Failed Max Bank Submissions</td><td>→ Failed immediately</td><td>Phase 7 — Stuck Payments and Failed Collections</td></tr>
+    <tr><td>Processing Payment</td><td>System waits for the collection result from the bank before proceeding with cancellation. If Received → stays Received. If Bounced → briefly Bounced then Stopped.</td><td>Phase 5</td></tr>
+    <tr><td>Pending Bank Response</td><td>System waits for the collection result from the bank before proceeding with cancellation. If Received → stays Received. If Bounced → briefly Bounced then Stopped.</td><td>Phase 5 and Phase 7</td></tr>
+    <tr><td>Pending Payer Response</td><td>→ Stopped immediately</td><td>Phase 7 — all categories</td></tr>
+    <tr><td>Pending Bank Resubmission</td><td>→ Stopped immediately</td><td>Phase 7</td></tr>
+    <tr><td>Escalated</td><td>→ Stopped immediately</td><td>Phase 7 — all escalated cases including Code R</td></tr>
+    <tr><td>Not Responding Clients</td><td>→ Stopped immediately</td><td>Phase 7 — Group 1 max payer reminders reached</td></tr>
+    <tr><td>Failed Max Bank Submissions</td><td>→ Stopped immediately</td><td>Phase 7 — Stuck Payments and Failed Collections</td></tr>
     <tr><td>Received</td><td>No action — already terminal</td><td>Phase 5 / Phase 7</td></tr>
     <tr><td>Failed</td><td>No action — already terminal</td><td>Phase 5 / Phase 7</td></tr>
     <tr><td>Stopped</td><td>No action — already terminal</td><td>Phase 5 / Phase 7</td></tr>
@@ -141,19 +131,19 @@ flowchart TD
     <div class="legend-item"><div class="legend-box" style="background:#D97706;"></div>Decision</div>
     <div class="legend-item"><div class="legend-box" style="background:#DC2626;"></div>Collection deleted</div>
     <div class="legend-item"><div class="legend-box" style="background:#475569;"></div>Collection stopped</div>
-    <div class="legend-item"><div class="legend-box" style="background:#9F1239;"></div>Collection failed</div>
     <div class="legend-item"><div class="legend-box" style="background:#FEF9C3;border:1.5px solid #D97706;"></div>Awaiting bank response</div>
     <div class="legend-item"><div class="legend-box" style="background:#15803D;"></div>Collection received</div>
+    <div class="legend-item"><div class="legend-box" style="background:#FFE4E6;border:1.5px solid #FDA4AF;"></div>Briefly Bounced before Stopped</div>
   </div>
 </div>
 
 
 <!-- WF 2 -->
 <div class="wf">
-  <div class="wf-title"><span class="wf-num">2</span>RPA Cancellation File Submission &amp; Bank Response</div>
+  <div class="wf-title"><span class="wf-num">2</span>RPA Cancellation File Submission, Bank Response &amp; Payer Notification</div>
   <div class="wf-sub">Actors: RPA · Bank · System &nbsp;·&nbsp; Fully automated · No human action required after initiation · Continues from WF 1</div>
   <div class="note">ℹ️ Once all active collections have been resolved (WF 1), the RPA submits the cancellation file to the bank. The bank either confirms or rejects it. Wrong timing is the only reason the bank rejects a cancellation — the system waits and resubmits automatically until the bank accepts.<br/><br/>
-  ℹ️ If a replacement mandate was also cancelled (Group 1 recovery), the RPA submits a separate cancellation file for the replacement mandate following the same flow below.</div>
+  ℹ️ The moment the mandate is confirmed Cancelled, the system automatically sends a cancellation notification to the payer via the configured contact channel (SMS, WhatsApp, or Email). This is sent for all cancellations — whether initiated by ops, merchant, or triggered automatically by Phase 7 Group 1 recovery.</div>
   <div class="mermaid">
 flowchart TD
   A([START — RPA triggered after WF 1 completes · Mandate in Cancellation Pending]) --> B
@@ -161,16 +151,18 @@ flowchart TD
   C["RPA submits cancellation file to bank<br/>Cancellation Attempts counter +1"]:::rpa --> D
   D{Bank response?}:::dec
   D -->|"Confirmed — cancellation accepted"| E
-  E["Mandate status → Cancelled<br/>Mandate moves from SCR-CAN-001 to SCR-CAN-002 (Cancelled Mandates)"]:::sys --> F([END — Mandate successfully cancelled])
+  E["Mandate status → Cancelled<br/>Mandate moves from SCR-CAN-001 to SCR-CAN-002 (Cancelled Mandates)"]:::sys --> N
+  N["System automatically sends payer cancellation notification:<br/>'Your payment mandate with [Merchant Name] has been successfully cancelled.<br/>No further payments will be collected from your account under this mandate.'<br/>Sent via configured channel: SMS / WhatsApp / Email"]:::notif --> F([END — Mandate cancelled · Payer notified])
   D -->|"Rejected — wrong timing"| G
   G["Mandate status → Cancellation Rejected<br/>Stays in SCR-CAN-001<br/>Cancellation Attempts already incremented"]:::rej --> H
   H["System waits configured retry period"]:::sys --> I
   I["Mandate status → Cancellation Pending<br/>RPA resubmits cancellation file"]:::sys --> B
 
-  classDef rpa  fill:#6D28D9,color:#fff,stroke:none
-  classDef sys  fill:#1E40AF,color:#fff,stroke:none
-  classDef dec  fill:#D97706,color:#fff,stroke:none
-  classDef rej  fill:#DC2626,color:#fff,stroke:none
+  classDef rpa   fill:#6D28D9,color:#fff,stroke:none
+  classDef sys   fill:#1E40AF,color:#fff,stroke:none
+  classDef dec   fill:#D97706,color:#fff,stroke:none
+  classDef rej   fill:#DC2626,color:#fff,stroke:none
+  classDef notif fill:#ECFEFF,color:#0E7490,stroke:#67E8F9,stroke-width:2px
   </div>
 
   <br/>
@@ -185,6 +177,7 @@ flowchart TD
     <div class="legend-item"><div class="legend-box" style="background:#1E40AF;"></div>System action</div>
     <div class="legend-item"><div class="legend-box" style="background:#D97706;"></div>Bank decision</div>
     <div class="legend-item"><div class="legend-box" style="background:#DC2626;"></div>Cancellation Rejected — system retrying</div>
+    <div class="legend-item"><div class="legend-box" style="background:#ECFEFF;border:1.5px solid #67E8F9;"></div>Payer notification sent</div>
   </div>
 </div>
 
@@ -192,69 +185,84 @@ flowchart TD
 <!-- WF 3 -->
 <div class="wf">
   <div class="wf-title"><span class="wf-num">3</span>Mandate Cancellation Status Flow &amp; Screen Routing</div>
-  <div class="wf-sub">Reference — mandate statuses through Phase 8 and which screen each status lives on</div>
+  <div class="wf-sub">Reference — all mandate statuses in Phase 8 and which screen each lives on · Includes the Pending to be Replaced path</div>
   <div class="mermaid">
 flowchart TD
-  A["Mandate status: APPROVED<br/>Visible in SCR-MND-001 Mandate Management"]:::active
+  A["Mandate status: Approved<br/>SCR-MND-001 Mandate Management<br/>Cancel action available"]:::active
 
-  A -->|"Ops / Merchant clicks Cancel<br/>Confirmation confirmed"| B
+  A -->|"Phase 7 Group 1 bounce<br/>(codes A, F, G, V, W)"| PTR
+  PTR["Mandate status: Pending to be Replaced<br/>SCR-MND-001 Mandate Management<br/>Cancel action NOT available"]:::ptr
+  PTR -->|"Phase 7 completes — new mandate<br/>issued and approved by bank"| B
+
+  A -->|"Ops or merchant manually cancels"| B
 
   B["Mandate status: Cancellation Pending<br/>SCR-CAN-001 Cancellation Pending Dashboard"]:::pending
 
-  B --> C["Immediate collection impact:<br/>Future Collections → deleted<br/>Ready for Collection → Stopped (permanent)<br/>Processing Payment → flagged, wait for bank response (WF 1b)<br/>Pending Bank Response → flagged, wait for bank response (WF 1b)<br/>All active Phase 7 statuses → Failed immediately<br/>Pending Payer to Sign / Bank to Approve → Failed + replacement mandate cancelled"]:::impact
+  B --> C["Immediate collection impact (WF 1):<br/>Future Collections → deleted · Ready for Collection → Stopped<br/>Processing Payment / Pending Bank Response → WF 1b<br/>All active Phase 7 recovery statuses → Stopped immediately<br/>Terminal statuses → no action"]:::impact
 
   C --> D["RPA submits cancellation file to bank<br/>Cancellation Attempts +1"]:::rpa
 
   D --> E{Bank response?}:::dec
 
   E -->|"Confirmed"| F["Mandate status: Cancelled<br/>SCR-CAN-002 Cancelled Mandates · Read-only audit record"]:::cancelled
+  F --> N["System sends payer cancellation notification<br/>via configured channel (SMS / WhatsApp / Email)"]:::notif
 
   E -->|"Rejected — wrong timing"| G["Mandate status: Cancellation Rejected<br/>SCR-CAN-001 · System waiting before retry"]:::rejected
   G -->|"System retries automatically"| D
 
   classDef active    fill:#DCFCE7,color:#15803D,stroke:#86EFAC,stroke-width:2px
+  classDef ptr       fill:#E0F2FE,color:#0369A1,stroke:#BAE6FD,stroke-width:2px
   classDef pending   fill:#FEF9C3,color:#854D0E,stroke:#FCD34D,stroke-width:2px
   classDef rejected  fill:#FEF2F2,color:#DC2626,stroke:#FECACA,stroke-width:2px
   classDef cancelled fill:#F1F5F9,color:#475569,stroke:#CBD5E1,stroke-width:2px
   classDef rpa       fill:#6D28D9,color:#fff,stroke:none
   classDef dec       fill:#D97706,color:#fff,stroke:none
-  classDef impact    fill:#FFF1F2,color:#9F1239,stroke:#FDA4AF,stroke-width:2px
+  classDef impact    fill:#FFF7ED,color:#92400E,stroke:#FED7AA,stroke-width:2px
+  classDef notif     fill:#ECFEFF,color:#0E7490,stroke:#67E8F9,stroke-width:2px
   </div>
 
   <table class="ref" style="margin-top:20px;">
-    <tr><th>Status</th><th>Badge bg · text</th><th>Screen</th><th>Actions available</th></tr>
+    <tr><th>Status</th><th>Badge bg · text</th><th>Screen</th><th>Cancel action available?</th></tr>
     <tr>
       <td><span class="bdg" style="background:#DCFCE7;color:#15803D;">Approved</span></td>
       <td>#DCFCE7 · #15803D</td>
       <td>SCR-MND-001 Mandate Management</td>
-      <td>All standard mandate actions including Cancel</td>
+      <td>Yes — ops or merchant can cancel at any time</td>
+    </tr>
+    <tr>
+      <td><span class="bdg" style="background:#E0F2FE;color:#0369A1;border:1px solid #BAE6FD;">Pending to be Replaced</span></td>
+      <td>#E0F2FE · #0369A1 · border #BAE6FD</td>
+      <td>SCR-MND-001 Mandate Management</td>
+      <td>No — Phase 7 Group 1 recovery is in progress. Mandate will automatically enter Phase 8 when the new mandate is issued and approved. Merchant must wait for the new mandate to be issued before they can cancel it.</td>
     </tr>
     <tr>
       <td><span class="bdg" style="background:#FEF9C3;color:#854D0E;">Cancellation Pending</span></td>
       <td>#FEF9C3 · #854D0E</td>
       <td>SCR-CAN-001 Cancellation Pending Dashboard</td>
-      <td>None — cancellation file submitted to bank, awaiting response</td>
+      <td>No — already in Phase 8. Cancellation file submitted to bank, awaiting response.</td>
     </tr>
     <tr>
       <td><span class="bdg" style="background:#FEF2F2;color:#DC2626;">Cancellation Rejected</span></td>
       <td>#FEF2F2 · #DC2626</td>
       <td>SCR-CAN-001 Cancellation Pending Dashboard</td>
-      <td>None — system retrying automatically. Wrong timing only.</td>
+      <td>No — system retrying automatically. Wrong timing is the only rejection reason.</td>
     </tr>
     <tr>
       <td><span class="bdg" style="background:#F1F5F9;color:#475569;">Cancelled</span></td>
       <td>#F1F5F9 · #475569</td>
       <td>SCR-CAN-002 Cancelled Mandates</td>
-      <td>None — permanent terminal state. Read-only audit record.</td>
+      <td>No — permanent terminal state. Payer notified automatically on entry to this status.</td>
     </tr>
   </table>
 
   <br/>
-  <p style="font-size:12px;font-weight:700;color:#172B4D;margin-bottom:8px;">Phase 7 replacement mandate rule (Group 1 — NEW DD CASES)</p>
+  <p style="font-size:12px;font-weight:700;color:#172B4D;margin-bottom:8px;">Pending to be Replaced — how it works</p>
   <table class="ref">
-    <tr><th>Scenario</th><th>What Phase 8 does</th></tr>
-    <tr><td>Phase 7 recovery created a replacement mandate for this mandate (codes A, F, G, V, W) AND the merchant/ops cancels the original mandate via Phase 8</td><td>The replacement mandate is also cancelled automatically. A separate Cancellation Pending record is created for the replacement mandate. The same WF 2 bank submission flow runs for both mandates. Both must receive bank confirmation before each is marked Cancelled.</td></tr>
-    <tr><td>Phase 7 recovery is still in progress (payer has not yet signed the replacement mandate, or bank has not yet approved it)</td><td>The in-progress collections are set to Failed immediately. The replacement mandate — if already created — is cancelled via Phase 8. If the replacement mandate was not yet created (payer had not clicked the link), no replacement mandate to cancel.</td></tr>
+    <tr><th>Step</th><th>What happens</th></tr>
+    <tr><td>1. Phase 7 bounces with codes A, F, G, V, W</td><td>Phase 7 creates a new mandate for the payer and sets the original mandate status to "Pending to be Replaced" in SCR-MND-001. No Cancel action is shown for this mandate.</td></tr>
+    <tr><td>2. Phase 7 recovery completes</td><td>The payer signs the new mandate. The bank approves it. The new mandate is now active.</td></tr>
+    <tr><td>3. Original mandate enters Phase 8 automatically</td><td>System sets the original mandate to Cancellation Pending. Phase 8 normal flow continues (WF 1 → WF 2). Payer is notified when cancellation is confirmed.</td></tr>
+    <tr><td>4. If merchant wants to cancel the NEW mandate</td><td>The merchant must wait until the new mandate is issued and approved (step 2). Then they can cancel the new mandate like any other active mandate — the Cancel action is available on it normally.</td></tr>
   </table>
 </div>
 
