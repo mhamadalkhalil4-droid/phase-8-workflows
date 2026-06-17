@@ -54,9 +54,9 @@ flowchart TD
   E["Mandate status → Cancellation Pending<br/>Mandate moves to SCR-CAN-001"]:::sys --> H
 
   H["System scans all collections linked to this mandate"]:::sys --> I
-  I{More collections to process?}:::dec
-  I -->|NO| Z["RPA triggered to submit cancellation file to bank"]:::rpa
-  I -->|YES| J
+  I{Do we have collections still being processed by the bank?}:::dec
+  I -->|"No — all done, proceed with cancellation"| Z["RPA triggered to submit cancellation file to bank"]:::rpa
+  I -->|"Yes — continue processing"| J
 
   J{Collection status?}:::dec
 
@@ -65,7 +65,7 @@ flowchart TD
   J -->|"Processing Payment"| J3["System waits for collection result before cancelling mandate<br/>See WF 1b"]:::wait
   J -->|"Pending Bank Response<br/>(Phase 5 and Phase 7 context)"| J4["System waits for collection result before cancelling mandate<br/>See WF 1b"]:::wait
 
-  J -->|"Any active Phase 7 recovery status:<br/>Pending Payer Response<br/>Pending Bank Resubmission<br/>Escalated<br/>Not Responding Clients<br/>Failed Max Bank Submissions"| J5["Status → Stopped immediately<br/>Moves to Collection Log<br/>No further recovery attempted"]:::stop
+  J -->|"Any active bounced collection recovery status:<br/>Pending Payer Response<br/>Pending Bank Resubmission<br/>Escalated<br/>Not Responding Clients<br/>Failed Max Bank Submissions"| J5["Status → Stopped<br/>Moves to Collection Log<br/>No further recovery attempted"]:::stop
 
   J -->|"Received / Failed / Stopped / Waived"| J7["Already in terminal state<br/>No action needed"]:::info
 
@@ -95,15 +95,18 @@ flowchart TD
   A([Collection is Processing Payment or Pending Bank Response<br/>when mandate cancellation is initiated]) --> B
   B["System waits for the collection result from the bank<br/>Mandate cancellation is on hold until this collection resolves"]:::sys --> C
   C{Phase 6 downloads settlement file —<br/>bank response for this collection?}:::dec
-  C -->|"Received — bank collected the payment"| D["Collection status → Received<br/>Moves to Collection Log<br/>Mandate cancellation continues — WF 2 proceeds"]:::ok
+  C -->|"Received — bank collected the payment"| D["Collection status → Received<br/>Moves to Collection Log"]:::ok
+  D --> MERCH["System creates an in-app dashboard notification to the merchant:<br/>'A collection of [amount] AED was received by the bank<br/>after the mandate cancellation was initiated.'"]:::notif
+  MERCH --> WF2A([Mandate cancellation continues — WF 2 proceeds])
   C -->|"Bounced — bank returned the payment"| E["Collection briefly shows Bounced status"]:::bounce
-  E --> F["System immediately sets status → Stopped<br/>(mandate is being cancelled — no Phase 7 recovery attempted)<br/>Moves to Collection Log<br/>Mandate cancellation continues — WF 2 proceeds"]:::stop
+  E --> F["System immediately sets status → Stopped<br/>(mandate is being cancelled — no bounced payment recovery attempted)<br/>Moves to Collection Log<br/>Mandate cancellation continues — WF 2 proceeds"]:::stop
 
   classDef sys    fill:#1E40AF,color:#fff,stroke:none
   classDef dec    fill:#D97706,color:#fff,stroke:none
   classDef ok     fill:#15803D,color:#fff,stroke:none
   classDef bounce fill:#FFE4E6,color:#9F1239,stroke:#FDA4AF,stroke-width:2px
   classDef stop   fill:#475569,color:#fff,stroke:none
+  classDef notif  fill:#ECFEFF,color:#0E7490,stroke:#67E8F9,stroke-width:2px
   </div>
 
   <br/>
@@ -114,11 +117,11 @@ flowchart TD
     <tr><td>Ready for Collection</td><td>→ Stopped (permanent)</td><td>Phase 5</td></tr>
     <tr><td>Processing Payment</td><td>System waits for the collection result from the bank before proceeding with cancellation. If Received → stays Received. If Bounced → briefly Bounced then Stopped.</td><td>Phase 5</td></tr>
     <tr><td>Pending Bank Response</td><td>System waits for the collection result from the bank before proceeding with cancellation. If Received → stays Received. If Bounced → briefly Bounced then Stopped.</td><td>Phase 5 and Phase 7</td></tr>
-    <tr><td>Pending Payer Response</td><td>→ Stopped immediately</td><td>Phase 7 — all categories</td></tr>
-    <tr><td>Pending Bank Resubmission</td><td>→ Stopped immediately</td><td>Phase 7</td></tr>
-    <tr><td>Escalated</td><td>→ Stopped immediately</td><td>Phase 7 — all escalated cases including Code R</td></tr>
-    <tr><td>Not Responding Clients</td><td>→ Stopped immediately</td><td>Phase 7 — Group 1 max payer reminders reached</td></tr>
-    <tr><td>Failed Max Bank Submissions</td><td>→ Stopped immediately</td><td>Phase 7 — Stuck Payments and Failed Collections</td></tr>
+    <tr><td>Pending Payer Response</td><td>→ Stopped</td><td>Bounced collection recovery — all categories</td></tr>
+    <tr><td>Pending Bank Resubmission</td><td>→ Stopped</td><td>Bounced collection recovery</td></tr>
+    <tr><td>Escalated</td><td>→ Stopped</td><td>Bounced collection recovery — all escalated cases including Code R</td></tr>
+    <tr><td>Not Responding Clients</td><td>→ Stopped</td><td>Bounced collection recovery — Group 1 max payer reminders reached</td></tr>
+    <tr><td>Failed Max Bank Submissions</td><td>→ Stopped</td><td>Bounced collection recovery — Stuck Payments and Failed Collections</td></tr>
     <tr><td>Received</td><td>No action — already terminal</td><td>Phase 5 / Phase 7</td></tr>
     <tr><td>Failed</td><td>No action — already terminal</td><td>Phase 5 / Phase 7</td></tr>
     <tr><td>Stopped</td><td>No action — already terminal</td><td>Phase 5 / Phase 7</td></tr>
@@ -134,6 +137,7 @@ flowchart TD
     <div class="legend-item"><div class="legend-box" style="background:#FEF9C3;border:1.5px solid #D97706;"></div>Awaiting bank response</div>
     <div class="legend-item"><div class="legend-box" style="background:#15803D;"></div>Collection received</div>
     <div class="legend-item"><div class="legend-box" style="background:#FFE4E6;border:1.5px solid #FDA4AF;"></div>Briefly Bounced before Stopped</div>
+    <div class="legend-item"><div class="legend-box" style="background:#ECFEFF;border:1.5px solid #67E8F9;"></div>In-app merchant notification</div>
   </div>
 </div>
 
@@ -152,7 +156,7 @@ flowchart TD
   D{Bank response?}:::dec
   D -->|"Confirmed — cancellation accepted"| E
   E["Mandate status → Cancelled<br/>Mandate moves from SCR-CAN-001 to SCR-CAN-002 (Cancelled Mandates)"]:::sys --> N
-  N["System automatically sends payer cancellation notification:<br/>'Your payment mandate with [Merchant Name] has been successfully cancelled.<br/>No further payments will be collected from your account under this mandate.'<br/>Sent via configured channel: SMS / WhatsApp / Email"]:::notif --> F([END — Mandate cancelled · Payer notified])
+  N["System automatically sends payer cancellation notification:<br/>'Dear [Payer Full Name], your Payment mandate with [Merchant Name]<br/>with the amount: [amount] AED has been successfully cancelled.<br/>No further payments will be collected from your account under this mandate.'<br/><br/>Amount: fixed collection amount for Fixed mandates ·<br/>last collected amount for Variable / Free Schedule mandates ·<br/>omitted if no collections have been made yet<br/>Sent via configured channel: SMS / WhatsApp / Email"]:::notif --> F([END — Mandate cancelled · Payer notified])
   D -->|"Rejected — wrong timing"| G
   G["Mandate status → Cancellation Rejected<br/>Stays in SCR-CAN-001<br/>Cancellation Attempts already incremented"]:::rej --> H
   H["System waits configured retry period"]:::sys --> I
@@ -198,14 +202,14 @@ flowchart TD
 
   B["Mandate status: Cancellation Pending<br/>SCR-CAN-001 Cancellation Pending Dashboard"]:::pending
 
-  B --> C["Immediate collection impact (WF 1):<br/>Future Collections → deleted · Ready for Collection → Stopped<br/>Processing Payment / Pending Bank Response → WF 1b<br/>All active Phase 7 recovery statuses → Stopped immediately<br/>Terminal statuses → no action"]:::impact
+  B --> C["Immediate collection impact (WF 1):<br/>Future Collections → deleted · Ready for Collection → Stopped<br/>Processing Payment / Pending Bank Response → WF 1b<br/>All active bounced collection recovery statuses → Stopped<br/>Terminal statuses → no action"]:::impact
 
   C --> D["RPA submits cancellation file to bank<br/>Cancellation Attempts +1"]:::rpa
 
   D --> E{Bank response?}:::dec
 
   E -->|"Confirmed"| F["Mandate status: Cancelled<br/>SCR-CAN-002 Cancelled Mandates · Read-only audit record"]:::cancelled
-  F --> N["System sends payer cancellation notification<br/>via configured channel (SMS / WhatsApp / Email)"]:::notif
+  F --> N["System sends payer cancellation notification via configured channel:<br/>SMS / WhatsApp / Email<br/>Amount logic: fixed amount · last collected amount · omitted if no collections yet"]:::notif
 
   E -->|"Rejected — wrong timing"| G["Mandate status: Cancellation Rejected<br/>SCR-CAN-001 · System waiting before retry"]:::rejected
   G -->|"System retries automatically"| D
